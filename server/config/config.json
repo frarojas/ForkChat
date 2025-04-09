@@ -1,0 +1,11 @@
+{
+    "Server": {
+        "port": 8080,
+        "userFilePath": "usuarios.json"
+    },
+    
+    "OtherSettings": {
+        "logLevel": "debug",
+        "maxConnections": 100
+    }
+}

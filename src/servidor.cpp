@@ -11,7 +11,6 @@
 #include <sys/select.h>
 #include <cstdlib>
 #include <fstream>
-#include <string>
 
 int SERVER_TCP_PORT = 5000;
 int DISCOVERY_UDP_PORT = 5001;

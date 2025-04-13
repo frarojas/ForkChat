@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <cstdlib>
+#include <fstream>
 
 // Definiciones de colores ANSI
 #define COLOR_RESET   "\033[0m"
@@ -16,10 +17,29 @@
 #define MAX_BUFFER 1024
 
 // Puertos definidos para descubrimiento y conexión TCP
-#define DISCOVERY_PORT 5001   // Puerto UDP para detección del servidor
-#define SERVER_TCP_PORT 5000  // Puerto TCP para la mensajería
+int DISCOVERY_UDP_PORT = 5001;   // Puerto UDP para detección del servidor
+int SERVER_TCP_PORT = 5000;  // Puerto TCP para la mensajería
 
 const char* DISCOVERY_MESSAGE = "DISCOVER_SERVER";
+
+void leerConfiguracion() {
+    std::ifstream archivo("../config/config.txt");
+    if (!archivo.is_open()) {
+        std::cerr << "No se pudo abrir config.txt. Usando puertos por defecto." << std::endl;
+        return;
+    }
+    std::string linea;
+    while (getline(archivo, linea)) {
+        std::istringstream iss(linea);
+        std::string clave;
+        int valor;
+        if (iss >> clave >> valor) {
+            if (clave == "TCP_PORT") SERVER_TCP_PORT = valor;
+            else if (clave == "UDP_PORT") DISCOVERY_UDP_PORT = valor;
+        }
+    }
+    archivo.close();
+}
 
 // Función para descubrir la IP del servidor mediante broadcast UDP
 std::string discoverServerIP() {
@@ -39,7 +59,7 @@ std::string discoverServerIP() {
     sockaddr_in broadcastAddr;
     memset(&broadcastAddr, 0, sizeof(broadcastAddr));
     broadcastAddr.sin_family = AF_INET;
-    broadcastAddr.sin_port = htons(DISCOVERY_PORT);
+    broadcastAddr.sin_port = htons(DISCOVERY_UDP_PORT);
     broadcastAddr.sin_addr.s_addr = inet_addr("255.255.255.255");
     
     if (sendto(udpSock, DISCOVERY_MESSAGE, strlen(DISCOVERY_MESSAGE), 0,
@@ -100,6 +120,9 @@ void recibirMensajes(int sockfd) {
 }
 
 int main() {
+    // Leer la configuración de los puertos desde el archivo
+    leerConfiguracion();
+    
     std::string nombreUsuario;
     
     // Se solicita el nombre de usuario

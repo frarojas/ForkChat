@@ -2,6 +2,7 @@
 #include <cstring>
 #include <sstream>
 #include <map>
+#include <vector>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -9,9 +10,11 @@
 #include <sys/types.h>
 #include <sys/select.h>
 #include <cstdlib>
+#include <fstream>
+#include <string>
 
-#define SERVER_TCP_PORT 5000
-#define DISCOVERY_UDP_PORT 5001
+int SERVER_TCP_PORT = 5000;
+int DISCOVERY_UDP_PORT = 5001;
 #define MAX_BUFFER 1024
 
 const char* DISCOVERY_REQUEST = "DISCOVER_SERVER";
@@ -24,6 +27,26 @@ struct Usuario {
 };
 
 std::map<std::string, Usuario> usuarios;
+std::map<std::string, std::vector<std::string>> mensajesPendientes;
+
+void leerConfiguracion() {
+    std::ifstream archivo("../config/config.txt");
+    if (!archivo.is_open()) {
+        std::cerr << "No se pudo abrir config.txt. Usando puertos por defecto." << std::endl;
+        return;
+    }
+    std::string linea;
+    while (getline(archivo, linea)) {
+        std::istringstream iss(linea);
+        std::string clave;
+        int valor;
+        if (iss >> clave >> valor) {
+            if (clave == "TCP_PORT") SERVER_TCP_PORT = valor;
+            else if (clave == "UDP_PORT") DISCOVERY_UDP_PORT = valor;
+        }
+    }
+    archivo.close();
+}
 
 void registrarUsuario(int client_fd, sockaddr_in client_addr, const std::string &nombre) {
     Usuario usr;
@@ -31,7 +54,16 @@ void registrarUsuario(int client_fd, sockaddr_in client_addr, const std::string 
     usr.ip = inet_ntoa(client_addr.sin_addr);
     usr.socket_fd = client_fd;
     usuarios[nombre] = usr;
+
     std::cout << "Usuario registrado: " << nombre << " desde " << usr.ip << std::endl;
+
+    if (mensajesPendientes.find(nombre) != mensajesPendientes.end()) {
+        for (const std::string &mensaje : mensajesPendientes[nombre]) {
+            send(client_fd, mensaje.c_str(), mensaje.length(), 0);
+        }
+        mensajesPendientes.erase(nombre);
+        std::cout << "Mensajes pendientes enviados a " << nombre << std::endl;
+    }
 }
 
 void reenviarMensaje(const std::string &destinatario, const std::string &mensaje, int origen_fd) {
@@ -43,14 +75,15 @@ void reenviarMensaje(const std::string &destinatario, const std::string &mensaje
         }
     }
 
+    std::string fullMsg = "[" + nombreEmisor + "]: " + mensaje;
+
     if (usuarios.find(destinatario) != usuarios.end()) {
         int dest_fd = usuarios[destinatario].socket_fd;
-        std::string fullMsg = "[" + nombreEmisor + "]: " + mensaje;
         send(dest_fd, fullMsg.c_str(), fullMsg.length(), 0);
         std::cout << "Reenviado mensaje de " << nombreEmisor << " a " << destinatario << std::endl;
     } else {
-        std::string errorMsg = "Usuario destinatario no registrado.\n";
-        send(origen_fd, errorMsg.c_str(), errorMsg.length(), 0);
+        mensajesPendientes[destinatario].push_back(fullMsg);
+        std::cout << "Guardado mensaje pendiente para " << destinatario << std::endl;
     }
 }
 
@@ -80,6 +113,14 @@ void manejarCliente(int client_fd, sockaddr_in client_addr, char *buffer, int le
 }
 
 void iniciarServidorTCP() {
+    leerConfiguracion();
+    if (SERVER_TCP_PORT == 0 || DISCOVERY_UDP_PORT == 0) {
+        std::cerr << "Error: Los puertos no están configurados correctamente." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    std::cout << "Puerto TCP: " << SERVER_TCP_PORT << std::endl;
+    std::cout << "Puerto UDP: " << DISCOVERY_UDP_PORT << std::endl;
+
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         perror("Error al crear el socket TCP");

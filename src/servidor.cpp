@@ -66,6 +66,7 @@ void registrarUsuario(int client_fd, sockaddr_in client_addr, const std::string 
 }
 
 void reenviarMensaje(const std::string &destinatario, const std::string &mensaje, int origen_fd) {
+    // Buscar el nombre del usuario emisor basado en su descriptor de socket.
     std::string nombreEmisor = "desconocido";
     for (const auto &par : usuarios) {
         if (par.second.socket_fd == origen_fd) {
@@ -74,15 +75,14 @@ void reenviarMensaje(const std::string &destinatario, const std::string &mensaje
         }
     }
 
-    std::string fullMsg = "[" + nombreEmisor + "]: " + mensaje;
-
     if (usuarios.find(destinatario) != usuarios.end()) {
         int dest_fd = usuarios[destinatario].socket_fd;
+        std::string fullMsg = "[" + nombreEmisor + "]: " + mensaje;
         send(dest_fd, fullMsg.c_str(), fullMsg.length(), 0);
         std::cout << "Reenviado mensaje de " << nombreEmisor << " a " << destinatario << std::endl;
     } else {
-        mensajesPendientes[destinatario].push_back(fullMsg);
-        std::cout << "Guardado mensaje pendiente para " << destinatario << std::endl;
+        std::string errorMsg = "Usuario destinatario no registrado.\n";
+        send(origen_fd, errorMsg.c_str(), errorMsg.length(), 0);
     }
 }
 
